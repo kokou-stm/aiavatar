@@ -1,156 +1,134 @@
-# Gloss-Based Pipeline for Spoken to Signed Language Translation
+# Spoken-to-Signed Translation (Text, Audio, JSON, Video, Unity)
 
-a `text-to-gloss-to-pose-to-video` pipeline for spoken to signed language translation.
+This repository extends the original **gloss-based spoken-to-signed pipeline** with a practical API and Unity integration:
 
-- Demos available for:
-  - 🇩🇪 [Swiss German Sign Language](https://sign.mt/?sil=sgg&spl=de) 🇨🇭
-  - 🇫🇷 [French Sign Language of Switzerland](https://sign.mt/?sil=ssr&spl=fr)🇨🇭
-  - 🇮🇹 [Italian Sign Language of Switzerland](https://sign.mt/?sil=slf&spl=it) 🇨🇭
-
-- Paper available on [arxiv](https://arxiv.org/abs/2305.17714), presented
-  at [AT4SSL 2023](https://sites.google.com/tilburguniversity.edu/at4ssl2023/).
+- **Text → Gloss → Pose → JSON**
+- **Text → Gloss → Pose → MP4 (landmarks)**
+- **Audio → Transcription → Translation → Pose → UDP to Unity**
+- **UDP text overlay in Unity**
 
 ![Visualization of our pipeline](assets/pipeline.jpg)
 
-## Install
+---
+
+## What’s Inside
+
+- **FastAPI backend** (`backend_api.py`) with endpoints for:
+  - audio transcription
+  - JSON landmarks generation
+  - MP4 landmarks rendering
+  - UDP streaming to Unity
+- **Unity scripts** for:
+  - UDP landmarks receiver + text overlay
+  - Record button (red/green), microphone capture, and audio upload
+- **Dummy lexicon** (`assets/dummy_lexicon`) for quick testing
+
+---
+
+## Quick Start (Backend)
 
 ```bash
-pip install spoken-to-signed
+# create/activate venv
+python -m venv venv
+source venv/bin/activate
+
+# install deps
+pip install -r requirements.txt
+
+# run API
+uvicorn backend_api:app --host 127.0.0.1 --port 5000
 ```
 
-Then, to download a lexicon, run:
-```bash
-download_lexicon \
-  --name <signsuisse> \
-  --directory <path_to_directory>
-```
+API will be available at:
+- Swagger UI: `http://127.0.0.1:5000/docs`
 
-## Usage
+---
 
-For language codes, we use the [IANA Language Subtag Registry](https://www.iana.org/assignments/language-subtag-registry/language-subtag-registry).
-Our pipeline provides multiple scripts.
+## Endpoints
 
-To quickly demo it using a dummy lexicon, either open it in Colab:
+### `POST /transcribe`
+Upload audio (`wav`) and return transcription. Also generates landmarks and streams them to Unity over UDP.
 
-<a target="_blank" href="https://colab.research.google.com/drive/1UtBmfBIhUa2EdLMnWJr0hxAOZelQ50_9?usp=sharing">
-  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
-</a>
+- Sends landmarks to `UDP_REPLAY_PORT` (default **5053**)
+- Sends text to `UDP_TEXT_PORT` (default **5054**)
 
-or run it locally with some installation steps first:
+### `POST /text-to-landmarks-json`
+Send text, get landmarks JSON in response.
 
-```bash
-git clone https://github.com/ZurichNLP/spoken-to-signed-translation
-cd spoken-to-signed-translation
+### `POST /text-to-landmarks-video`
+Send text, get MP4 landmarks video.
 
-pip install .
+### `POST /text-to-landmarks-udp`
+Send text, stream landmarks via UDP to Unity (and send text).
 
-text_to_gloss_to_pose \
-  --text "Kleine Kinder essen Pizza in Zürich." \
-  --glosser "simple" \
-  --lexicon "assets/dummy_lexicon" \
-  --spoken-language "de" \
-  --signed-language "sgg" \
-  --pose "quick_test.pose"
-```
+---
 
-#### Text-to-Gloss Translation
+## Translation + Language Detection
 
-This script translates input text into gloss notation.
+For text endpoints, language is auto‑detected and translated to German before pose generation:
 
-```bash
-text_to_gloss \
-  --text <input_text> \
-  --glosser <simple|spacylemma|rules|nmt> \
-  --spoken-language <de|fr|it> \
-  --signed-language <sgg|ssr|slf>
-```
+- `langdetect` detects input language
+- `deep-translator` translates to **DE**
 
-#### Text-to-Gloss-to-Pose Translation
+You can disable or override with payload fields:
 
-This script translates input text into gloss notation, then converts the glosses into a pose file.
-
-```bash
-text_to_gloss_to_pose \
-  --text <input_text> \
-  --glosser <simple|spacylemma|rules|nmt> \
-  --lexicon <path_to_directory> \
-  --spoken-language <de|fr|it> \
-  --signed-language <sgg|ssr|slf> \
-  --pose <output_pose_file_path>.pose
-```
-
-#### Text-to-Gloss-to-Pose-to-Video Translation
-
-This script translates input text into gloss notation, converts the glosses into a pose file, and then transforms the pose file into a video.
-
-> **Note:** Video generation requires the `pose-to-video` package with pix2pix and upscaler:
-> ```bash
-> pip install 'pose-to-video[pix2pix,simple_upscaler] @ git+https://github.com/sign-language-processing/pose-to-video'
-> ```
-
-```bash
-text_to_gloss_to_pose_to_video \
-  --text <input_text> \
-  --glosser <simple|spacylemma|rules|nmt> \
-  --lexicon <path_to_directory> \
-  --spoken-language <de|fr|it> \
-  --signed-language <sgg|ssr|slf> \
-  --video <output_video_file_path>.mp4
-```
-
-## Methodology
-
-The pipeline consists of three main components:
-
-1. **Text-to-Gloss Translation**
-
-   Transforms the input (spoken language) text into a sequence of glosses.
-
-  - [Simple lemmatizer](spoken_to_signed/text_to_gloss/simple.py),
-  - [Spacy lemmatizer: more accurate, but slower lemmatization, covering fewer languages than `simple`](spoken_to_signed/text_to_gloss/spacylemma.py),
-  - [Rule-based word reordering and dropping](spoken_to_signed/text_to_gloss/rules.py) component and
-  - [Neural machine translation system](spoken_to_signed/text_to_gloss/nmt.py).
-
-2. **Gloss-to-Pose Conversion**
-
-  - [Lookup](spoken_to_signed/gloss_to_pose/lookup/lookup.py): Uses a lexicon of signed languages to convert the sequence of glosses into a
-      sequence of poses.
-  - [Pose Concatenation](spoken_to_signed/gloss_to_pose/concatenate.py): The poses are then cropped, concatenated, and smoothed,
-      creating a pose representation for the input sentence.
-
-3. **Pose-to-Video Generation**
-
-    Transforms the processed pose video back into a synthesized video using an image translation model.
-
-## Supported Languages
-
-| Language                    | IANA Code | Glossers Supported                                                                                                                                         | Lexicon Data Source                                  |
-|-----------------------------|-----------|------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------|
-| Swiss German Sign Language  | sgg       | `simple`, `spacylemma`, `rules`, [`nmt`](https://github.com/ZurichNLP/spoken-to-signed-translation/tree/main/spoken_to_signed/text_to_gloss#nmt-component) | [SignSuisse (de)](https://signsuisse.sgb-fss.ch/de/) |
-| Swiss French Sign Language  | ssr       | `simple`, `spacylemma`                                                                                                                                                   | [SignSuisse (fr)](https://signsuisse.sgb-fss.ch/fr/) |
-| Swiss Italian Sign Language | slf       | `simple`, `spacylemma`                                                                                                                                                   | [SignSuisse (it)](https://signsuisse.sgb-fss.ch/it/) |
-| German Sign Language        | gsg       | `simple`, `spacylemma`, [`nmt`](https://github.com/ZurichNLP/spoken-to-signed-translation/tree/main/spoken_to_signed/text_to_gloss#nmt-component)                        | WordNet (Coming Soon)                                |
-| British Sign Language       | bfi       | `simple`, `spacylemma`, [`nmt`](TODO-model-link)                                                                                                                         | WordNet (Coming Soon)                                |
-
-## Online Playgrounds
-
-We have two available:
-
-- [sign.mt](https://sign.mt) is a web interface of a translation system.
-- [research.sign.mt](https://research.sign.mt) is an overview of sign language processing literature.
-
-## Citation
-
-If you find this work useful, please cite our paper:
-
-```bib
-@inproceedings{moryossef2023baseline,
-  title={An Open-Source Gloss-Based Baseline for Spoken to Signed Language Translation},
-  author={Moryossef, Amit and M{\"u}ller, Mathias and G{\"o}hring, Anne and Jiang, Zifan and Goldberg, Yoav and Ebling, Sarah},
-  booktitle={2nd International Workshop on Automatic Translation for Signed and Spoken Languages (AT4SSL)},
-  year={2023},
-  month={June},
-  url={https://github.com/ZurichNLP/spoken-to-signed-translation},
-  note={Available at: \url{https://arxiv.org/abs/2305.17714}}
+```json
+{
+  "translate": true,
+  "auto_detect_language": true,
+  "source_language": "auto",
+  "target_language": "de"
 }
 ```
+
+---
+
+## Unity Integration
+
+### UDP Receiver (Landmarks + Text)
+Script: `UdpReceiver.cs`
+
+- Receives landmarks on port **5053**
+- Receives text on port **5054**
+- Requires a `TextMeshPro` field to display text
+
+### Record & Send (Microphone + Button)
+Script: `RecordAndSendAudio.cs`
+
+- Red button = recording
+- Green button = idle
+- Sends audio to `http://127.0.0.1:5000/transcribe`
+- Updates transcript text
+
+---
+
+## Environment Variables
+
+```bash
+UDP_IP=127.0.0.1
+UDP_PORT=5052
+UDP_REPLAY_PORT=5053
+UDP_TEXT_PORT=5054
+```
+
+---
+
+## Notes
+
+- Dummy lexicon is minimal and only covers a few German words.
+- If you see lookup errors for unknown words, use the provided lexicon or install a larger one.
+- UDP landmarks match MediaPipe layout (pose/face/hands).
+
+---
+
+## Original Project (Upstream)
+
+This repo is built on top of the **ZurichNLP spoken-to-signed** pipeline:
+- Paper: https://arxiv.org/abs/2305.17714
+- Demo: https://sign.mt
+
+---
+
+## License
+
+See `LICENSE`.
