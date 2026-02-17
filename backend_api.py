@@ -582,6 +582,75 @@ async def text_to_landmarks_video(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/text-to-landmarks-video-de")
+async def text_to_landmarks_video_de(
+    payload: TextToVideoRequest,
+    background_tasks: BackgroundTasks,
+):
+    try:
+        if not payload.text.strip():
+            raise HTTPException(status_code=400, detail="Texte vide")
+
+        cwd = os.getcwd()
+        lexicon_path = resolve_lexicon_path(cwd, payload.lexicon_path)
+        if not os.path.isdir(lexicon_path):
+            raise HTTPException(status_code=400, detail=f"Lexicon introuvable: {lexicon_path}")
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pose") as temp_pose:
+            temp_pose_path = temp_pose.name
+
+        # Pas de traduction : texte allemand brut
+        input_text = payload.text
+
+        cmd = [
+            "text_to_gloss_to_pose",
+            "--text", input_text,
+            "--glosser", "simple",
+            "--lexicon", lexicon_path,
+            "--spoken-language", payload.spoken_language,
+            "--signed-language", payload.signed_language,
+            "--pose", temp_pose_path,
+        ]
+
+        logger.info(f"Lancement de la génération de pose: {' '.join(cmd)}")
+        process_result = subprocess.run(cmd, capture_output=True, text=True)
+        if process_result.returncode != 0:
+            logger.error(f"Erreur text_to_gloss_to_pose: {process_result.stderr}")
+            raise HTTPException(status_code=500, detail=f"Erreur génération pose: {process_result.stderr}")
+
+        with open(temp_pose_path, "rb") as f:
+            pose = Pose.read(f.read())
+
+        pose_dict = build_pose_dict(pose)
+
+        output_video = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+        output_video_path = output_video.name
+        output_video.close()
+
+        generate_landmarks_video(
+            pose_dict=pose_dict,
+            output_path=output_video_path,
+            width=payload.width,
+            height=payload.height,
+            fps=payload.fps,
+            line_thickness=payload.line_thickness,
+            point_radius=payload.point_radius,
+        )
+
+        background_tasks.add_task(os.unlink, temp_pose_path)
+        background_tasks.add_task(os.unlink, output_video_path)
+
+        return FileResponse(
+            output_video_path,
+            media_type="video/mp4",
+            filename="landmarks_video.mp4",
+        )
+
+    except Exception as e:
+        logger.error(f"Erreur text_to_landmarks_video_de: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/text-to-landmarks-json")
 async def text_to_landmarks_json(payload: TextToVideoRequest):
     try:
@@ -714,6 +783,7 @@ async def root():
             "POST /transcribe": "Transcrit un fichier audio",
             "POST /audio-to-landmarks": "Transcrit, traduit et génère les landmarks JSON",
             "POST /text-to-landmarks-video": "Prend du texte et génère une vidéo MP4 des landmarks",
+            "POST /text-to-landmarks-video-de": "Prend du texte allemand brut et génère une vidéo MP4 des landmarks",
             "POST /text-to-landmarks-json": "Prend du texte et génère les landmarks JSON",
             "POST /text-to-landmarks-udp": "Prend du texte et streame les landmarks par UDP vers Unity",
             "GET /health": "Vérifie l'état du serveur",

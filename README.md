@@ -1,76 +1,88 @@
-# Spoken-to-Signed Translation (Text, Audio, JSON, Video, Unity)
+# Traduction Spoken-to-Signed (Texte, Audio, JSON, Vidéo, Unity)
 
-This repository extends the original **gloss-based spoken-to-signed pipeline** with a practical API and Unity integration:
+Ce dépôt étend le pipeline **gloss-based spoken-to-signed** avec une API pratique et une intégration Unity :
 
-- **Text → Gloss → Pose → JSON**
-- **Text → Gloss → Pose → MP4 (landmarks)**
-- **Audio → Transcription → Translation → Pose → UDP to Unity**
-- **UDP text overlay in Unity**
+- **Texte → Gloss → Pose → JSON**
+- **Texte → Gloss → Pose → MP4 (landmarks)**
+- **Audio → Transcription → Traduction → Pose → UDP vers Unity**
+- **Overlay texte via UDP dans Unity**
 
 ![Visualization of our pipeline](assets/pipeline.jpg)
 
 ---
 
-## What’s Inside
+## Contenu
 
-- **FastAPI backend** (`backend_api.py`) with endpoints for:
-  - audio transcription
-  - JSON landmarks generation
-  - MP4 landmarks rendering
-  - UDP streaming to Unity
-- **Unity scripts** for:
-  - UDP landmarks receiver + text overlay
-  - Record button (red/green), microphone capture, and audio upload
-- **Dummy lexicon** (`assets/dummy_lexicon`) for quick testing
+- **Backend FastAPI** (`backend_api.py`) avec des endpoints pour :
+  - transcription audio
+  - génération de landmarks JSON
+  - rendu MP4 des landmarks
+  - streaming UDP vers Unity
+- **Scripts Unity** pour :
+  - réception UDP des landmarks + affichage du texte
+  - bouton Record (rouge/vert), capture micro et upload audio
+- **Lexique de test** (`assets/dummy_lexicon`) pour des essais rapides
+
+## Grandes étapes
+
+- Human Input to landmarks
+- Display landmarks with Unity
+- Text-to-pose
+- Text-to-JSON
+- Audio-from Unity to landmarks
+- Audio-from Unity to landmarks display on Unity
 
 ---
 
-## Quick Start (Backend)
+## Démarrage rapide (Backend)
 
 ```bash
-# create/activate venv
+# créer/activer venv
 python -m venv venv
 source venv/bin/activate
 
-# install deps
+# installer les dépendances
 pip install -r requirements.txt
 
-# run API
+# lancer l'API
 uvicorn backend_api:app --host 127.0.0.1 --port 5000
 ```
 
-API will be available at:
-- Swagger UI: `http://127.0.0.1:5000/docs`
+L'API sera disponible à :
+- Swagger UI : `http://127.0.0.1:5000/docs`
 
 ---
 
 ## Endpoints
 
 ### `POST /transcribe`
-Upload audio (`wav`) and return transcription. Also generates landmarks and streams them to Unity over UDP.
+Upload d'un audio (`wav`) et retour de la transcription. Génère aussi les landmarks et les envoie vers Unity en UDP.
 
-- Sends landmarks to `UDP_REPLAY_PORT` (default **5053**)
-- Sends text to `UDP_TEXT_PORT` (default **5054**)
+- Envoie les landmarks vers `UDP_REPLAY_PORT` (par défaut **5053**)
+- Envoie le texte vers `UDP_TEXT_PORT` (par défaut **5054**)
 
 ### `POST /text-to-landmarks-json`
-Send text, get landmarks JSON in response.
+Envoyer du texte, recevoir un JSON de landmarks.
 
 ### `POST /text-to-landmarks-video`
-Send text, get MP4 landmarks video.
+Envoyer du texte, recevoir une vidéo MP4 des landmarks.
+
+### `POST /text-to-landmarks-video-de`
+Envoyer du texte allemand brut (sans traduction), recevoir une vidéo MP4 des landmarks.
 
 ### `POST /text-to-landmarks-udp`
-Send text, stream landmarks via UDP to Unity (and send text).
+Envoyer du texte, streamer les landmarks via UDP vers Unity (et envoyer le texte).
 
 ---
 
-## Translation + Language Detection
+## Traduction + Détection de langue
 
-For text endpoints, language is auto‑detected and translated to German before pose generation:
+Pour les endpoints texte, la langue est auto‑détectée et traduite en allemand avant génération des poses :
 
-- `langdetect` detects input language
-- `deep-translator` translates to **DE**
+- `langdetect` détecte la langue d'entrée
+- `deep-translator` traduit vers **DE**
 
-You can disable or override with payload fields:
+Vous pouvez désactiver ou forcer via le payload :
 
 ```json
 {
@@ -83,26 +95,26 @@ You can disable or override with payload fields:
 
 ---
 
-## Unity Integration
+## Intégration Unity
 
-### UDP Receiver (Landmarks + Text)
-Script: `UdpReceiver.cs`
+### UDP Receiver (Landmarks + Texte)
+Script : `UdpReceiver.cs`
 
-- Receives landmarks on port **5053**
-- Receives text on port **5054**
-- Requires a `TextMeshPro` field to display text
+- Reçoit les landmarks sur le port **5053**
+- Reçoit le texte sur le port **5054**
+- Nécessite un champ `TextMeshPro` pour afficher le texte
 
-### Record & Send (Microphone + Button)
-Script: `RecordAndSendAudio.cs`
+### Record & Send (Micro + Bouton)
+Script : `RecordAndSendAudio.cs`
 
-- Red button = recording
-- Green button = idle
-- Sends audio to `http://127.0.0.1:5000/transcribe`
-- Updates transcript text
+- Bouton rouge = enregistrement
+- Bouton vert = idle
+- Envoie l'audio vers `http://127.0.0.1:5000/transcribe`
+- Met à jour le texte transcrit
 
 ---
 
-## Environment Variables
+## Variables d’environnement
 
 ```bash
 UDP_IP=127.0.0.1
@@ -115,20 +127,20 @@ UDP_TEXT_PORT=5054
 
 ## Notes
 
-- Dummy lexicon is minimal and only covers a few German words.
-- If you see lookup errors for unknown words, use the provided lexicon or install a larger one.
-- UDP landmarks match MediaPipe layout (pose/face/hands).
+- Le lexique de test est minimal et ne couvre que quelques mots en allemand.
+- En cas d'erreurs de lookup, utilisez ce lexique ou un plus grand.
+- Le format UDP suit le layout MediaPipe (pose/face/mains).
 
 ---
 
-## Original Project (Upstream)
+## Projet d’origine (Upstream)
 
-This repo is built on top of the **ZurichNLP spoken-to-signed** pipeline:
-- Paper: https://arxiv.org/abs/2305.17714
-- Demo: https://sign.mt
+Ce dépôt repose sur le pipeline **ZurichNLP spoken-to-signed** :
+- Paper : https://arxiv.org/abs/2305.17714
+- Démo : https://sign.mt
 
 ---
 
-## License
+## Licence
 
-See `LICENSE`.
+Voir `LICENSE`.
